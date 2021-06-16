@@ -11,39 +11,46 @@ ALTO = 600
 NEGRO = (0, 0, 0)
 BLANCO = (255, 255, 255)
 
-
-# Inicio del juego y crear la pantalla
+# Inicio del juego y creao la pantalla
 pygame.init()
 pantalla = pygame.display.set_mode((ANCHO, ALTO))
 pygame.display.set_caption("Space Trooper Adventure")
 clock = pygame.time.Clock()
 pygame.mixer.music.load("audio/metroid.wav")
 pygame.mixer.music.set_volume(0.2)
+pygame.mixer.music.play(loops=-1)
 
 #Por ahora voy a dejar el marcador muy normalito
 class Marcador(pygame.sprite.Sprite):
-    def __init__(self, x, y, fontsize=40, color=BLANCO):
+    palabras = "{}"
+
+    def __init__(self, x, y, justificado = "topright", fontsize=40, color=BLANCO):
         super().__init__()
+        self.x = x
+        self.y = y
         self.fuente = pygame.font.SysFont("Namco", fontsize)
-        self.texto = 0
+        self.contador = 0
         self.color = color
-        self.image = self.fuente.render(str(self.texto), True, self.color)
-        self.rect = self.image.get_rect()
+        self.justificado = justificado
+        self.image = self.fuente.render(str(self.contador), True, self.color)
     
     def update(self):
-        self.image = self.fuente.render(str(self.texto), True, self.color)
+        self.image = self.fuente.render(str(self.palabras.format(self.contador)), True, self.color)
+        d = {self.justificado: (self.x, self.y)}
+        self.rect = self.image.get_rect(**d)
 
 # El jugador que controla la nave
 class Nave(pygame.sprite.Sprite):
     def __init__(self):
         super().__init__()
         self.image = pygame.image.load("images/nave.png").convert()
-        self.image = pygame.transform.scale(self.image, (50, 60))
+        self.image = pygame.transform.scale(self.image, (45, 55))
         self.image.set_colorkey(NEGRO)
         self.rect = self.image.get_rect()
         self.rect.centerx = ANCHO - 750
         self.rect.bottom = ALTO // 2
         self.vy = 0
+        self.vidas = 3
 
     def update(self):
         self.vy = 0
@@ -60,15 +67,20 @@ class Nave(pygame.sprite.Sprite):
 
 #Los meteoritos
 class Roca(pygame.sprite.Sprite):
+    imagenes_roca = []
+    imagenes_roca_lista = ["images/output-onlinepngtools2.png", "images/output-onlinepngtools3.png"]
+
+    for i in imagenes_roca_lista:
+        imagenes_roca.append(pygame.image.load(i).convert())
+
     def __init__(self):
         super().__init__()
-        self.image = pygame.image.load("images/asteroide.png").convert()
-        self.image = pygame.transform.scale(self.image, (50, 60))
+        self.image = random.choice(self.imagenes_roca)
         self.image.set_colorkey(NEGRO)
         self.rect = self.image.get_rect()
         self.rect.x = random.randrange(780, 800)
         self.rect.y = random.randrange(ALTO - self.rect.height)
-        self.vx = random.randrange(1, 10)
+        self.vx = random.randrange(1, 8)
 
     
     def update(self):
@@ -77,7 +89,8 @@ class Roca(pygame.sprite.Sprite):
             self.rect.x = random.randrange(780, 800)
             self.rect.y = random.randrange(ALTO - self.rect.height)
             self.vx = random.randrange(1, 10)
-            marcador.texto += 1
+            marcador_puntos.contador += 1
+
 
 # Fondo de la pantalla 
 fondo = pygame.image.load("images/fondo.jpg").convert()
@@ -86,7 +99,7 @@ fondo = pygame.image.load("images/fondo.jpg").convert()
 # Incluir los objetos en el Group
 grupoSprites = pygame.sprite.Group()
 roca_list = pygame.sprite.Group()
-for i in range(15):
+for i in range(20):
     roca = Roca()
     grupoSprites.add(roca)
     roca_list.add(roca)
@@ -94,10 +107,13 @@ for i in range(15):
 nave = Nave()
 grupoSprites.add(nave)
 
-marcador = Marcador(10, 10)
-grupoSprites.add(marcador)
+marcador_puntos = Marcador(10,10, "topleft", fontsize = 50, color = (255, 0, 255))
+marcador_puntos.palabras = "Puntos: {}"
+grupoSprites.add(marcador_puntos)
 
-pygame.mixer.music.play(loops=-1)
+marcador_vidas = Marcador(790, 10, "topright", 50)
+marcador_vidas.palabras = "Vidas: {}"
+grupoSprites.add(marcador_vidas)
 
 # Bucle Principal
 running = True
@@ -112,7 +128,10 @@ while running:
 # Si hay una colisión
     colision = pygame.sprite.spritecollide(nave, roca_list, True)
     if colision:
-        running = False
+        nave.vidas -= 1
+        if nave.vidas == 0:
+            running = False
+    marcador_vidas.contador = nave.vidas
 
 # Blit, Draw, Displays
     pantalla.blit(fondo, [0, 0])
