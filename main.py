@@ -16,15 +16,19 @@ pygame.init()
 pantalla = pygame.display.set_mode((ANCHO, ALTO))
 pygame.display.set_caption("Space Trooper Adventure")
 clock = pygame.time.Clock()
+pygame.mixer.init()
 pygame.mixer.music.load("audio/metroid.wav")
+boom = pygame.mixer.Sound("audio/explosion.wav")
+boom.set_volume(0.1)
 pygame.mixer.music.set_volume(0.2)
 pygame.mixer.music.play(loops=-1)
+
 
 #Por ahora voy a dejar el marcador muy normalito
 class Marcador(pygame.sprite.Sprite):
     palabras = "{}"
 
-    def __init__(self, x, y, justificado = "topright", fontsize=40, color=BLANCO):
+    def __init__(self, x, y, justificado = "topright", fontsize=20, color=BLANCO):
         super().__init__()
         self.x = x
         self.y = y
@@ -50,7 +54,7 @@ class Nave(pygame.sprite.Sprite):
         self.rect.centerx = ANCHO - 750
         self.rect.bottom = ALTO // 2
         self.vy = 0
-        self.vidas = 3
+        self.vidas = 5
 
     def update(self):
         self.vy = 0
@@ -80,7 +84,7 @@ class Roca(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.x = random.randrange(780, 800)
         self.rect.y = random.randrange(ALTO - self.rect.height)
-        self.vx = random.randrange(1, 8)
+        self.vx = random.randrange(2, 8)
 
     
     def update(self):
@@ -88,12 +92,43 @@ class Roca(pygame.sprite.Sprite):
         if self.rect.right < 0:
             self.rect.x = random.randrange(780, 800)
             self.rect.y = random.randrange(ALTO - self.rect.height)
-            self.vx = random.randrange(1, 10)
+            self.vx = random.randrange(2, 8)
             marcador_puntos.contador += 1
+            #Eliminar las rocas que pasan la pantalla y que vuelvan a generarse en un lugar random
+
+class Explosion(pygame.sprite.Sprite):
+    def __init__(self, x, y, tamaño):
+        pygame.sprite.Sprite.__init__(self)
+        self.images = []
+        for num in range(1, 6):
+            img = pygame.image.load(f"images/exp{num}.png")
+            # voy a darle tamaño a las explosiones
+            if tamaño == 1:
+                img = pygame.transform.scale(img, (40, 40))
+            if tamaño == 2:
+                img = pygame.transform.scale(img, (100, 100))
+            self.images.append(img)
+
+        self.index = 0
+        self.image = self.images[self.index]
+        self.rect = self.image.get_rect()
+        self.rect.center = [x, y]
+        self.contador = 0
+
+    def update(self):
+        v_explosion = 3
+        self.contador += 1
+        if self.contador >= v_explosion and self.index < len(self.images) - 1:
+            self.contador = 0
+            self.index +=1
+            self.image = self.images[self.index]
+        if self.index >= len(self.images) - 1 and self.contador >= v_explosion:
+            self.kill()
 
 
 # Fondo de la pantalla 
-fondo = pygame.image.load("images/fondo.jpg").convert()
+fondo = pygame.image.load("images/maxresdefault.jpg").convert()
+x = 0
 #Hacer que el fondo sea dinámico si me da tiempo (estrellitas brillando, que se mueva, ¿que haga cosas chulas?)
 
 # Incluir los objetos en el Group
@@ -107,11 +142,11 @@ for i in range(20):
 nave = Nave()
 grupoSprites.add(nave)
 
-marcador_puntos = Marcador(10,10, "topleft", fontsize = 50, color = (255, 0, 255))
+marcador_puntos = Marcador(10,10, "topleft", fontsize = 35, color = (255, 0, 255))
 marcador_puntos.palabras = "Puntos: {}"
 grupoSprites.add(marcador_puntos)
 
-marcador_vidas = Marcador(790, 10, "topright", 50)
+marcador_vidas = Marcador(790, 10, "topright", fontsize = 35)
 marcador_vidas.palabras = "Vidas: {}"
 grupoSprites.add(marcador_vidas)
 
@@ -128,13 +163,20 @@ while running:
 # Si hay una colisión
     colision = pygame.sprite.spritecollide(nave, roca_list, True)
     if colision:
+        explosion = Explosion(nave.rect.centerx, nave.rect.centery, 2) #voy a dejar el tamaño grande por el momento
+        grupoSprites.add(explosion)
+        boom.play()
         nave.vidas -= 1
         if nave.vidas == 0:
             running = False
     marcador_vidas.contador = nave.vidas
 
 # Blit, Draw, Displays
-    pantalla.blit(fondo, [0, 0])
+    x_mueve = x % fondo.get_rect().width
+    pantalla.blit(fondo, [x_mueve - fondo.get_rect().width , 0])
+    if x_mueve < ANCHO:
+        pantalla.blit(fondo, (x_mueve, 0))
+    x -= 1
 
     grupoSprites.draw(pantalla)
 
