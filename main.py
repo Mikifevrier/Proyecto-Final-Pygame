@@ -2,6 +2,7 @@ import pygame
 import random
 from pygame import mixer
 from pygame import sprite
+import sys, os
 
 from pygame.constants import *
 
@@ -10,6 +11,7 @@ ANCHO = 800
 ALTO = 600
 NEGRO = (0, 0, 0)
 BLANCO = (255, 255, 255)
+
 
 # Inicio del juego y creao la pantalla
 pygame.init()
@@ -23,6 +25,8 @@ boom.set_volume(0.1)
 pygame.mixer.music.set_volume(0.2)
 pygame.mixer.music.play(loops=-1)
 
+fondo = pygame.image.load("images/maxresdefault.jpg").convert()
+x = 0
 
 #Por ahora voy a dejar el marcador muy normalito
 class Marcador(pygame.sprite.Sprite):
@@ -37,6 +41,8 @@ class Marcador(pygame.sprite.Sprite):
         self.color = color
         self.justificado = justificado
         self.image = self.fuente.render(str(self.contador), True, self.color)
+        self.rect = self.image.get_rect()
+
     
     def update(self):
         self.image = self.fuente.render(str(self.palabras.format(self.contador)), True, self.color)
@@ -77,7 +83,7 @@ class Roca(pygame.sprite.Sprite):
     for i in imagenes_roca_lista:
         imagenes_roca.append(pygame.image.load(i).convert())
 
-    def __init__(self):
+    def __init__(self, marcador):
         super().__init__()
         self.image = random.choice(self.imagenes_roca)
         self.image.set_colorkey(NEGRO)
@@ -85,6 +91,7 @@ class Roca(pygame.sprite.Sprite):
         self.rect.x = random.randrange(780, 800)
         self.rect.y = random.randrange(ALTO - self.rect.height)
         self.vx = random.randrange(2, 8)
+        self.marcador = marcador
 
     
     def update(self):
@@ -93,7 +100,7 @@ class Roca(pygame.sprite.Sprite):
             self.rect.x = random.randrange(780, 800)
             self.rect.y = random.randrange(ALTO - self.rect.height)
             self.vx = random.randrange(2, 8)
-            marcador_puntos.contador += 1
+            self.marcador.contador += 1
             #Eliminar las rocas que pasan la pantalla y que vuelvan a generarse en un lugar random
 
 class Explosion(pygame.sprite.Sprite):
@@ -125,61 +132,78 @@ class Explosion(pygame.sprite.Sprite):
         if self.index >= len(self.images) - 1 and self.contador >= v_explosion:
             self.kill()
 
+class Game():
+    clock = pygame.time.Clock()
 
-# Fondo de la pantalla 
-fondo = pygame.image.load("images/maxresdefault.jpg").convert()
-x = 0
-#Hacer que el fondo sea dinámico si me da tiempo (estrellitas brillando, que se mueva, ¿que haga cosas chulas?)
+    def __init__(self):
+        self.display = pygame.display
+        self.pantalla = self.display.set_mode((ANCHO, ALTO))
+        self.w = ANCHO
+        self.h = ALTO
+        self.x = 0
+        self.display.set_caption("Space Trooper Adventure")
+        self.fondo = pygame.image.load("images/maxresdefault.jpg").convert()
+        self.grupoSprites = pygame.sprite.Group()
+        self.roca_list = pygame.sprite.Group()
+        
+        self.marcador_puntos = Marcador(10,10, "topleft", fontsize = 35, color = (255, 0, 255))
+        self.marcador_puntos.palabras = "Puntos: {}"
+        self.grupoSprites.add(self.marcador_puntos)
 
-# Incluir los objetos en el Group
-grupoSprites = pygame.sprite.Group()
-roca_list = pygame.sprite.Group()
-for i in range(20):
-    roca = Roca()
-    grupoSprites.add(roca)
-    roca_list.add(roca)
+        self.marcador_vidas = Marcador(790, 10, "topright", fontsize = 35)
+        self.marcador_vidas.palabras = "Vidas: {}"
+        self.grupoSprites.add(self.marcador_vidas)
+        
+        for i in range(20):
+            self.roca = Roca(self.marcador_puntos)
+            self.grupoSprites.add(self.roca)
+            self.roca_list.add(self.roca)
+        
+        self.nave = Nave()
+        self.grupoSprites.add(self.nave)
 
-nave = Nave()
-grupoSprites.add(nave)
+    def mainloop(self):
+        running = True
+        while running:
+            dt = self.clock.tick(FPS)
+            running = self.handleevent()
+        
+        # Si hay una colisión
+            colision = pygame.sprite.spritecollide(self.nave, self.roca_list, True)
+            if colision:
+                self.explosion = Explosion(self.nave.rect.centerx, self.nave.rect.centery, 2) #voy a dejar el tamaño grande por el momento
+                self.grupoSprites.add(self.explosion)
+                boom.play()
+                self.nave.vidas -= 1
+                if self.nave.vidas == 0:
+                    running = False
+            self.marcador_vidas.contador = self.nave.vidas
+            
+            # Mueve la pantalla
+            x_mueve = self.x % self.fondo.get_rect().width
+            self.pantalla.blit(self.fondo, [x_mueve - self.fondo.get_rect().width , 0])
+            if x_mueve < ANCHO:
+                self.pantalla.blit(self.fondo, (x_mueve, 0))
+            self.x -= 1
+            
+            self.grupoSprites.draw(self.pantalla)
 
-marcador_puntos = Marcador(10,10, "topleft", fontsize = 35, color = (255, 0, 255))
-marcador_puntos.palabras = "Puntos: {}"
-grupoSprites.add(marcador_puntos)
+            pygame.display.flip()
+            self.grupoSprites.update()
+        
+        self.game_over()
 
-marcador_vidas = Marcador(790, 10, "topright", fontsize = 35)
-marcador_vidas.palabras = "Vidas: {}"
-grupoSprites.add(marcador_vidas)
+    def handleevent(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT or event.type == KEYDOWN and event.key == K_ESCAPE:
+                return False
+        return True
 
-# Bucle Principal
-running = True
-while running:
-    clock.tick(60)
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT or event.type == KEYDOWN and event.key == K_ESCAPE:
-            running = False
-    
-    grupoSprites.update()
+    def game_over(self):
+        pygame.quit()
+        sys.exit()
 
-# Si hay una colisión
-    colision = pygame.sprite.spritecollide(nave, roca_list, True)
-    if colision:
-        explosion = Explosion(nave.rect.centerx, nave.rect.centery, 2) #voy a dejar el tamaño grande por el momento
-        grupoSprites.add(explosion)
-        boom.play()
-        nave.vidas -= 1
-        if nave.vidas == 0:
-            running = False
-    marcador_vidas.contador = nave.vidas
-
-# Blit, Draw, Displays
-    x_mueve = x % fondo.get_rect().width
-    pantalla.blit(fondo, [x_mueve - fondo.get_rect().width , 0])
-    if x_mueve < ANCHO:
-        pantalla.blit(fondo, (x_mueve, 0))
-    x -= 1
-
-    grupoSprites.draw(pantalla)
-
-    pygame.display.flip()
-
-pygame.quit()
+if __name__ == "__main__":
+    pygame.init()
+    game = Game()
+    game.mainloop()
