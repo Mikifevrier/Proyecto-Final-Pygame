@@ -11,7 +11,7 @@ ANCHO = 800
 ALTO = 600
 NEGRO = (0, 0, 0)
 BLANCO = (255, 255, 255)
-
+VIDAS_INICIALES = 5
 
 # Inicio del juego y creao la pantalla
 pygame.init()
@@ -49,6 +49,21 @@ class Marcador(pygame.sprite.Sprite):
         d = {self.justificado: (self.x, self.y)}
         self.rect = self.image.get_rect(**d)
 
+class Texto(pygame.sprite.Sprite):  #Clase texto para usar aparte
+    palabras = "{}"
+
+    def __init__(self, x, y, t, justificado = "topright", fontsize=20, color=BLANCO):
+        super().__init__()
+        self.x = x
+        self.y = y
+        self.palabras = t
+        self.fuente = pygame.font.SysFont("Namco", fontsize)
+        self.color = color
+        self.justificado = justificado
+        self.image = self.fuente.render(self.palabras, True, self.color)
+        d = {self.justificado: (self.x, self.y)}
+        self.rect = self.image.get_rect(**d)
+
 # El jugador que controla la nave
 class Nave(pygame.sprite.Sprite):
     def __init__(self):
@@ -60,7 +75,7 @@ class Nave(pygame.sprite.Sprite):
         self.rect.centerx = ANCHO - 750
         self.rect.bottom = ALTO // 2
         self.vy = 0
-        self.vidas = 5
+        self.vidas = VIDAS_INICIALES
 
     def update(self):
         self.vy = 0
@@ -83,25 +98,28 @@ class Roca(pygame.sprite.Sprite):
     for i in imagenes_roca_lista:
         imagenes_roca.append(pygame.image.load(i).convert())
 
-    def __init__(self, marcador):
+    def __init__(self):
         super().__init__()
         self.image = random.choice(self.imagenes_roca)
         self.image.set_colorkey(NEGRO)
         self.rect = self.image.get_rect()
-        self.rect.x = random.randrange(780, 800)
-        self.rect.y = random.randrange(ALTO - self.rect.height)
+        self.rect.x = random.randrange(ANCHO + self.rect.width, ANCHO + self.rect.width + 30)
+        self.rect.y = random.randrange(self.rect.height, ALTO - self.rect.height)
         self.vx = random.randrange(2, 8)
-        self.marcador = marcador
 
     
     def update(self):
         self.rect.x -= self.vx
         if self.rect.right < 0:
-            self.rect.x = random.randrange(780, 800)
-            self.rect.y = random.randrange(ALTO - self.rect.height)
+            self.rect.x = random.randrange(ANCHO + self.rect.width, ANCHO + self.rect.width + 30)
+            self.rect.y = random.randrange(self.rect.height, ALTO - self.rect.height)
             self.vx = random.randrange(2, 8)
-            self.marcador.contador += 1
             #Eliminar las rocas que pasan la pantalla y que vuelvan a generarse en un lugar random
+
+    def reseteaRoca(self):  #Resetea la posicion de la roca
+        self.rect.x = random.randrange(ANCHO + self.rect.width, ANCHO + self.rect.width + 30)
+        self.rect.y = random.randrange(self.rect.height, ALTO - self.rect.height)
+        self.vx = random.randrange(2, 8)
 
 class Explosion(pygame.sprite.Sprite):
     def __init__(self, x, y, tamaño):
@@ -122,6 +140,8 @@ class Explosion(pygame.sprite.Sprite):
         self.rect.center = [x, y]
         self.contador = 0
 
+        self.muestraExplosion = False #Probar para mostrarla o no
+
     def update(self):
         v_explosion = 3
         self.contador += 1
@@ -130,7 +150,7 @@ class Explosion(pygame.sprite.Sprite):
             self.index +=1
             self.image = self.images[self.index]
         if self.index >= len(self.images) - 1 and self.contador >= v_explosion:
-            self.kill()
+            self.muestraExplosion = False
 
 class Game():
     clock = pygame.time.Clock()
@@ -143,65 +163,143 @@ class Game():
         self.x = 0
         self.display.set_caption("Space Trooper Adventure")
         self.fondo = pygame.image.load("images/maxresdefault.jpg").convert()
-        self.grupoSprites = pygame.sprite.Group()
-        self.roca_list = pygame.sprite.Group()
         
+        self.indicePantalla = 0
+        self.botonSoltado = False
+
+        self.grupoSpritesMenu = pygame.sprite.Group()
+        self.grupoSpritesGameOver = pygame.sprite.Group()
+        self.roca_list = [None] * 20
+
+        #Menu
+        self.textoMenu = Texto(ANCHO/2, ALTO/2, "Bienvenido", "center", 200)
+        self.grupoSpritesMenu.add(self.textoMenu)
+
+        #Juego
         self.marcador_puntos = Marcador(10,10, "topleft", fontsize = 35, color = (255, 0, 255))
         self.marcador_puntos.palabras = "Puntos: {}"
-        self.grupoSprites.add(self.marcador_puntos)
 
         self.marcador_vidas = Marcador(790, 10, "topright", fontsize = 35)
         self.marcador_vidas.palabras = "Vidas: {}"
-        self.grupoSprites.add(self.marcador_vidas)
         
         for i in range(20):
-            self.roca = Roca(self.marcador_puntos)
-            self.grupoSprites.add(self.roca)
-            self.roca_list.add(self.roca)
+            self.roca_list[i] = Roca()
         
         self.nave = Nave()
-        self.grupoSprites.add(self.nave)
+        
+        self.explosion = Explosion(self.nave.rect.centerx, self.nave.rect.centery, 2)
+
+        #Game Over
+        self.textoGameOver = Texto(ANCHO/2, ALTO/2, "GAME OVER" ,"center", 100)
+        self.grupoSpritesGameOver.add(self.textoGameOver)
 
     def mainloop(self):
         running = True
         while running:
+            pantalla.fill(NEGRO) 
             dt = self.clock.tick(FPS)
             running = self.handleevent()
         
-        # Si hay una colisión
-            colision = pygame.sprite.spritecollide(self.nave, self.roca_list, True)
-            if colision:
-                self.explosion = Explosion(self.nave.rect.centerx, self.nave.rect.centery, 2) #voy a dejar el tamaño grande por el momento
-                self.grupoSprites.add(self.explosion)
-                boom.play()
-                self.nave.vidas -= 1
-                if self.nave.vidas == 0:
-                    running = False
-            self.marcador_vidas.contador = self.nave.vidas
+            if self.indicePantalla == 0: #Pantalla Menu
+                
+                tecla = pygame.key.get_pressed()
+                if tecla[pygame.K_SPACE]:
+                    self.indicePantalla = 1
             
-            # Mueve la pantalla
-            x_mueve = self.x % self.fondo.get_rect().width
-            self.pantalla.blit(self.fondo, [x_mueve - self.fondo.get_rect().width , 0])
-            if x_mueve < ANCHO:
-                self.pantalla.blit(self.fondo, (x_mueve, 0))
-            self.x -= 1
-            
-            self.grupoSprites.draw(self.pantalla)
+                # Mueve la pantalla
+                x_mueve = self.x % self.fondo.get_rect().width
+                self.pantalla.blit(self.fondo, [x_mueve - self.fondo.get_rect().width , 0])
+                if x_mueve < ANCHO:
+                    self.pantalla.blit(self.fondo, (x_mueve, 0))
+                self.x -= 1
+                
+                self.grupoSpritesMenu.draw(self.pantalla)
 
-            pygame.display.flip()
-            self.grupoSprites.update()
+                pygame.display.flip()
+                self.grupoSpritesMenu.update()
         
-        self.game_over()
+            elif self.indicePantalla == 1: # Juego 
+                # Si hay una colisión
+                for roca in self.roca_list:    
+                    self.sumarPunto(roca, self.marcador_puntos) #Alomejor sumamos un punto
+                    colision = pygame.sprite.collide_rect(self.nave, roca) # Detecta colision solo entre dos sprites en concreto
+                    if colision:
+                        self.explosion = Explosion(self.nave.rect.centerx, self.nave.rect.centery, 2) #voy a dejar el tamaño grande por el momento
+                        self.explosion.muestraExplosion = True  #Debemos mostrar la explosion
+                        boom.play()
+                        self.nave.vidas -= 1
+
+                        roca.reseteaRoca()
+
+                        if self.nave.vidas == 0:
+                            self.indicePantalla = 2
+                            self.nave = Nave()
+                            self.explosion.rect.x += ANCHO      #La sacamos de pantalla para que no se vea al volver a jugar
+                            self.resetearRocas()                #Volvemos a crear las rocas con el constructor, por lo que volveran a la parte derecha de la pantalla
+                self.marcador_vidas.contador = self.nave.vidas
+        
+        #Más adelante buscar otro fondo
+                # Mueve la pantalla
+                x_mueve = self.x % self.fondo.get_rect().width
+                self.pantalla.blit(self.fondo, [x_mueve - self.fondo.get_rect().width , 0])
+                if x_mueve < ANCHO:
+                    self.pantalla.blit(self.fondo, (x_mueve, 0))
+                self.x -= 1
+
+                self.updateGame()
+            
+            elif self.indicePantalla == 2: # GameOver
+                #print("Printeamos")
+                if self.botonSoltado:
+                    self.indicePantalla = 0                   
+
+                self.grupoSpritesGameOver.draw(self.pantalla)
+
+                pygame.display.flip()
+                self.grupoSpritesGameOver.update()
+        
+        self.game_over() 
+
 
     def handleevent(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT or event.type == KEYDOWN and event.key == K_ESCAPE:
                 return False
+            if event.type == KEYUP and event.key == K_SPACE:
+                self.botonSoltado = True
+            else:
+                self.botonSoltado = False
         return True
 
     def game_over(self):
         pygame.quit()
         sys.exit()
+
+    def resetearRocas(self):    #Resetea la posicion de las rocas
+        for i in range(20):
+            self.roca_list[i] = Roca()
+
+    def sumarPunto(self, roca, marcador): #Miramos si debemos añadir un nuevo punto
+        if(roca.rect.x < -roca.rect.width/2):
+            marcador.contador += 1
+            roca.reseteaRoca()
+    
+    def updateGame(self):
+        grupoSpritesJuego = pygame.sprite.Group()
+        grupoSpritesJuego.add(self.marcador_vidas)
+        grupoSpritesJuego.add(self.marcador_puntos)
+        grupoSpritesJuego.add(self.nave)
+
+        if self.explosion.muestraExplosion:   #Mostramos la explosion o no
+            grupoSpritesJuego.add(self.explosion)
+
+        for i in range(20):
+            grupoSpritesJuego.add(self.roca_list[i])
+
+        grupoSpritesJuego.draw(self.pantalla)
+        pygame.display.flip()
+
+        grupoSpritesJuego.update()
 
 if __name__ == "__main__":
     pygame.init()
