@@ -91,33 +91,49 @@ class Nave(pygame.sprite.Sprite):
         if tecla[pygame.K_DOWN]:
             self.vy = 7
         self.rect.y += self.vy
-        if self.rect.top < 0:
-            self.rect.top = 0
-        if self.rect.bottom > ALTO:
-            self.rect.bottom = ALTO
+        if self.rect.top < 25:
+            self.rect.top = 25
+        if self.rect.bottom > ALTO - 25:
+            self.rect.bottom = ALTO - 25
+    
+    def reseteaVidas(self):
+        self.vidas = VIDAS_INICIALES
 
 #Los meteoritos
 class Roca(pygame.sprite.Sprite):
     imagenes_roca = []
-    imagenes_roca_lista = ["images/output-onlinepngtools2.png", "images/output-onlinepngtools3.png"]
-
-    for i in imagenes_roca_lista:
-        imagenes_roca.append(pygame.image.load(i).convert())
 
     def __init__(self):
         super().__init__()
-        self.image = random.choice(self.imagenes_roca)
+        self.images = []
+        for num in range(0, 9):
+            img = pygame.image.load(f"images/small/a1000{num}.png")
+            self.images.append(img)
+        indice = random.randint(0, len(self.images) - 1)
+        self.image = self.images[indice]
         self.image.set_colorkey(NEGRO)
         self.rect = self.image.get_rect()
+        self.contador = indice
+
         self.reseteaRoca()
+        #self.marcador = marcador
 
     
     def update(self):
         self.rect.x -= self.vx
-        #self.image = pygame.transform.rotate(self.image, 1)  Rotar rocas pero no funciona (preguntar a Ramón)
+        #self.image = pygame.transform.rotate(self.image, 15)  #Rotar rocas pero no funciona (preguntar a Ramón)
         if self.rect.right < 0:
             self.resetearRoca()
             #Eliminar las rocas que pasan la pantalla y que vuelvan a generarse en un lugar random
+        
+        ####Animacion       
+        self.contador += 1
+
+        if self.contador == len(self.images):
+            self.contador = 0
+        
+        if self.contador % 2 == 0:
+            self.image = self.images[self.contador]
 
     def reseteaRoca(self):  #Resetea la posicion de la roca
         self.rect.x = random.randrange(ANCHO + self.rect.width, ANCHO + self.rect.width + 30)
@@ -143,7 +159,7 @@ class Explosion(pygame.sprite.Sprite):
         self.rect.center = [x, y]
         self.contador = 0
 
-        self.muestraExplosion = False #Probar para mostrarla o no
+        self.muestraExplosion = False #Probatina para mostrarla o no
 
     def update(self):
         v_explosion = 3
@@ -210,8 +226,8 @@ class Enemigo(pygame.sprite.Sprite):
                 self.balasArray[i].rect.x = ANCHO + self.balasArray[i].rect.width
                 nave.vidas -= 1
 
-    def tiempoPartida(self, tiempo):            # Funciona en generico, por lo que podemos pasarle cualquier tiempo, y nos devolvera si ese tiempo ha pasado o no
-        seconds = tiempo - (pygame.time.get_ticks() - self.start_ticks_balas)/1000 #calculate how many seconds
+    def tiempoPartida(self, tiempo):            # Utiliza el tiempo, ver si pasa o no
+        seconds = tiempo - (pygame.time.get_ticks() - self.start_ticks_balas)/1000 #para los segundos que pasa
         if seconds <= 0: 
             self.start_ticks_balas = pygame.time.get_ticks()
             return True
@@ -262,6 +278,7 @@ class Game():
         self.roca_list = [None] * 20
 
         self.puedeJugar = False
+        self.reseterTiempoJuego = False
 
         #Menu
         self.textoMenu = Texto(ANCHO/2, ALTO/2, "Bienvenido", "center", 200)
@@ -287,7 +304,8 @@ class Game():
             self.roca_list[i] = Roca()
         
         self.nave = Nave()
-        
+        self.nave.reseteaVidas()
+
         self.explosion = Explosion(self.nave.rect.centerx, self.nave.rect.centery, 2)
 
         #Game Over
@@ -295,7 +313,7 @@ class Game():
         self.grupoSpritesGameOver.add(self.textoGameOver)
 
         #Temporizador
-        self.start_ticks = pygame.time.get_ticks() #starter tick
+        self.start_ticks = pygame.time.get_ticks() #tick del inicio
 
     def mainloop(self):
         running = True
@@ -304,27 +322,26 @@ class Game():
             dt = self.clock.tick(FPS)
             running = self.handleevent()
         
-            if self.indicePantalla == 0: #Pantalla Menu
+            if self.indicePantalla == 0: ### Pantalla Bienvenido
                 
                 tecla = pygame.key.get_pressed()
                 if tecla[pygame.K_SPACE]:
                     self.indicePantalla = 1
                     self.reseteaJuego()
-            
-                # Mueve la pantalla
-                x_mueve = self.x % self.fondo.get_rect().width
-                self.pantalla.blit(self.fondo, [x_mueve - self.fondo.get_rect().width , 0])
-                if x_mueve < ANCHO:
-                    self.pantalla.blit(self.fondo, (x_mueve, 0))
-                self.x -= 1
                 
+                self.mueveFondo()
+
                 self.grupoSpritesMenu.draw(self.pantalla)
 
                 pygame.display.flip()
                 self.grupoSpritesMenu.update()
         
-            elif self.indicePantalla == 1: # Juego 
+            elif self.indicePantalla == 1: ### Pantalla 1
                 # Si hay una colisión
+                if self.reseterTiempoJuego:
+                    self.start_ticks = pygame.time.get_ticks()
+                    self.reseterTiempoJuego = False
+
                 if self.puedeJugar:
                     for roca in self.roca_list:    
                         self.sumarPunto(roca, self.marcador_puntos) #Alomejor sumamos un punto
@@ -345,18 +362,18 @@ class Game():
                 else:
                     if self.tiempoPartida(3):
                         self.puedeJugar = True
+                        self.reseterTiempoJuego = True
 
-                # Mueve la pantalla
-                x_mueve = self.x % self.fondo.get_rect().width
-                self.pantalla.blit(self.fondo, [x_mueve - self.fondo.get_rect().width , 0])
-                if x_mueve < ANCHO:
-                    self.pantalla.blit(self.fondo, (x_mueve, 0))
-                self.x -= 1
-
+                self.mueveFondo()
                 self.updateGame()
+
             
-            elif self.indicePantalla == 2: ### Nivel 2
-                
+            elif self.indicePantalla == 2: ### Pantalla 2
+                if self.reseterTiempoJuego:
+                    self.start_ticks = pygame.time.get_ticks()
+                    self.nave.vidas = self.marcador_vidas.contador
+                    self.reseterTiempoJuego = False
+
                 if self.puedeJugar:
                     for roca in self.roca_list:    
                         self.sumarPunto(roca, self.marcador_puntos)
@@ -376,18 +393,14 @@ class Game():
                 else:
                     if self.tiempoPartida(3):
                         self.puedeJugar = True
+                        self.reseterTiempoJuego = True
                         #self.start_ticks = pygame.time.get_ticks()
 
-                # Mueve la pantalla
-                x_mueve = self.x % self.fondo.get_rect().width
-                self.pantalla.blit(self.fondo, [x_mueve - self.fondo.get_rect().width , 0])
-                if x_mueve < ANCHO:
-                    self.pantalla.blit(self.fondo, (x_mueve, 0))
-                self.x -= 1
-                
+                self.mueveFondo()
                 self.updateGame()
 
-            elif self.indicePantalla == 3: # GameOve
+            elif self.indicePantalla == 3: # GameOver
+                
                 if self.botonSoltado:
                     self.indicePantalla = 0                   
 
@@ -427,7 +440,7 @@ class Game():
         if self.puedeJugar:
             grupoSpritesJuego.add(self.marcador_vidas)
             grupoSpritesJuego.add(self.marcador_puntos)
-            grupoSpritesJuego.add(self.nave)
+            grupoSpritesJuego.add(self.textoTiempo)
         else:
             grupoSpritesJuego.add(self.textoNivel)
         grupoSpritesJuego.add(self.nave)
@@ -438,9 +451,10 @@ class Game():
         for i in range(20):
             grupoSpritesJuego.add(self.roca_list[i])
         
-        grupoSpritesJuego.add(self.enemigo)
-        for i in range(5):
-            grupoSpritesJuego.add(self.enemigo.balasArray[i])
+        if self.indicePantalla == 2:
+            grupoSpritesJuego.add(self.enemigo)        
+            for i in range(5):
+                grupoSpritesJuego.add(self.enemigo.balasArray[i])
 
         grupoSpritesJuego.draw(self.pantalla)
         pygame.display.flip()
@@ -450,9 +464,9 @@ class Game():
                 if self.tiempoPartida(TIEMPO_NIVEL_1):
                     self.indicePantalla += 1
                     self.indice_Nivel += 1
-                    self.textoNivel.palabras = "Nivel " + str(self.indice_Nivel)
+                    self.textoNivel = Texto(ANCHO/2, ALTO/2, "Nivel " + str(self.indice_Nivel), "center", 45)
                     self.puedeJugar = False
-                    self.reseteaJuego()
+                    self.siguienteNivel()
             elif self.indicePantalla == 2:
                 if self.tiempoPartida(TIEMPO_NIVEL_2):
                     self.indicePantalla = 0
@@ -466,8 +480,26 @@ class Game():
         self.marcador_vidas.contador = VIDAS_INICIALES
         self.explosion.rect.x += ANCHO
         self.nave = Nave()
+        self.nave.vidas = VIDAS_INICIALES
         self.start_ticks = pygame.time.get_ticks() #starter tick, truco muy bueno para contar tiempos
+        self.indice_Nivel = 1
+        self.textoNivel = Texto(ANCHO/2, ALTO/2, "Nivel " + str(self.indice_Nivel), "center", 45)
+        self.puedeJugar = False
 
+    def siguienteNivel(self):
+        self.resetearRocas()
+        self.explosion.rect.x += ANCHO
+        self.nave = Nave()        
+        self.enemigo = Enemigo(ANCHO/4 * 3, ALTO/2, 4)
+        self.start_ticks = pygame.time.get_ticks() #tengo que pasarlo al llegar al siguiente nivel
+
+    def mueveFondo(self):
+        # Mueve la pantalla
+        x_mueve = self.x % self.fondo.get_rect().width
+        self.pantalla.blit(self.fondo, [x_mueve - self.fondo.get_rect().width , 0])
+        if x_mueve < ANCHO:
+            self.pantalla.blit(self.fondo, (x_mueve, 0))
+        self.x -= 1
 
     def tiempoPartida(self, tiempo):      # Funciona en generico, por lo que podemos pasarle cualquier tiempo, y nos devolvera si ese tiempo ha pasado o no
         seconds = tiempo - (pygame.time.get_ticks() - self.start_ticks)/1000 # Calcula cuántos segundos han pasado
